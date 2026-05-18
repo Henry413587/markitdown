@@ -1,0 +1,5 @@
+.build/
+build/
+dist/
+.swiftpm/
+.venv/
