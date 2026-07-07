@@ -7,6 +7,7 @@ import Observation
 final class ConversionStore {
     var items: [ConversionItem] = []
     var selectedItemID: UUID?
+    var selectedItemIDs: Set<UUID> = []
     var isConverting = false
     var outputMode: OutputLocationMode = .besideSource
     var selectedOutputFolder: URL?
@@ -23,8 +24,21 @@ final class ConversionStore {
     }
 
     var selectedItem: ConversionItem? {
-        guard let selectedItemID else { return items.first }
-        return items.first { $0.id == selectedItemID }
+        if let selectedItemID,
+           let item = items.first(where: { $0.id == selectedItemID }) {
+            return item
+        }
+
+        if let selectedID = items.first(where: { selectedItemIDs.contains($0.id) })?.id {
+            selectedItemID = selectedID
+            return items.first { $0.id == selectedID }
+        }
+
+        return items.first
+    }
+
+    var selectedItems: [ConversionItem] {
+        items.filter { selectedItemIDs.contains($0.id) }
     }
 
     var overallProgress: Double {
@@ -45,13 +59,27 @@ final class ConversionStore {
 
         guard !newItems.isEmpty else { return }
         items.append(contentsOf: newItems)
-        selectedItemID = selectedItemID ?? newItems.first?.id
+        if selectedItemID == nil, let firstID = newItems.first?.id {
+            selectedItemID = firstID
+            selectedItemIDs = [firstID]
+        }
     }
 
     func remove(_ item: ConversionItem) {
-        items.removeAll { $0.id == item.id }
-        if selectedItemID == item.id {
-            selectedItemID = items.first?.id
+        removeItems(withIDs: [item.id])
+    }
+
+    func removeItems(withIDs ids: Set<UUID>) {
+        guard !isConverting else { return }
+        items.removeAll { ids.contains($0.id) }
+        selectedItemIDs.subtract(ids)
+
+        if let selectedItemID, ids.contains(selectedItemID) {
+            self.selectedItemID = items.first(where: { selectedItemIDs.contains($0.id) })?.id ?? items.first?.id
+        }
+
+        if selectedItemIDs.isEmpty, let firstID = selectedItemID {
+            selectedItemIDs = [firstID]
         }
     }
 
@@ -59,6 +87,7 @@ final class ConversionStore {
         guard !isConverting else { return }
         items.removeAll()
         selectedItemID = nil
+        selectedItemIDs.removeAll()
     }
 
     func chooseOutputFolder() {
@@ -90,6 +119,30 @@ final class ConversionStore {
         await NotificationService.shared.sendConversionFinished(successCount: successCount, failureCount: failureCount)
     }
 
+    func convertSelectedItems() async {
+        let ids = selectedItemIDs.isEmpty ? Set(selectedItem.map { [$0.id] } ?? []) : selectedItemIDs
+        await convertItems(withIDs: ids)
+    }
+
+    func convertItems(withIDs ids: Set<UUID>) async {
+        guard !ids.isEmpty, !isConverting else { return }
+        isConverting = true
+
+        for id in ids {
+            guard let index = items.firstIndex(where: { $0.id == id }),
+                  items[index].status != .completed else {
+                continue
+            }
+            await convertItem(at: index)
+        }
+
+        isConverting = false
+        let converted = items.filter { ids.contains($0.id) }
+        let successCount = converted.filter { $0.status == .completed }.count
+        let failureCount = converted.filter { $0.status == .failed }.count
+        await NotificationService.shared.sendConversionFinished(successCount: successCount, failureCount: failureCount)
+    }
+
     private func convertItem(at index: Int) async {
         items[index].status = .preparing
         items[index].progress = 0.15
@@ -105,6 +158,8 @@ final class ConversionStore {
             items[index].status = .writing
             items[index].progress = 0.85
             items[index].markdownPreview = result.markdown
+            items[index].markdownByteCount = result.markdownByteCount
+            items[index].isInlinePreviewSkipped = result.previewWasSkipped
             items[index].status = .completed
             items[index].progress = 1
             items[index].errorMessage = nil
@@ -113,6 +168,8 @@ final class ConversionStore {
             items[index].status = .failed
             items[index].progress = 1
             items[index].errorMessage = error.localizedDescription
+            items[index].markdownByteCount = nil
+            items[index].isInlinePreviewSkipped = false
         }
     }
 

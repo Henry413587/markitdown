@@ -1,21 +1,63 @@
 import Foundation
 
 struct ConversionResult {
+    static let inlinePreviewByteLimit: Int64 = 256 * 1024
+
     var markdown: String
+    var markdownByteCount: Int64
+    var previewWasSkipped: Bool
     var standardError: String
 }
 
 enum MarkitdownRunnerError: LocalizedError {
     case commandFailed(Int32, String)
     case unreadableOutput
+    case unsupportedFormat(String)
 
     var errorDescription: String? {
         switch self {
         case .commandFailed(_, let message):
-            message.isEmpty ? "markitdown 转换失败。" : message
+            return message.isEmpty ? "markitdown 转换失败。" : Self.shortMessage(from: message)
         case .unreadableOutput:
-            "无法读取转换后的 Markdown。"
+            return "无法读取转换后的 Markdown。"
+        case .unsupportedFormat(let fileExtension):
+            let currentFormat = fileExtension.isEmpty ? "该文件" : ".\(fileExtension)"
+            return """
+            当前不支持 \(currentFormat) 文件格式。
+
+            MarkItDown 当前支持：
+            \(Self.supportedFormats)
+
+            如果你要转换旧版 Word .doc 文件，请先在 Word、Pages 或 LibreOffice 中另存为 .docx 后再添加。
+            """
         }
+    }
+
+    private static let supportedFormats = """
+    .docx, .pptx, .xlsx, .xls, .pdf, .html, .htm, .txt, .text, .md, .markdown, .json, .jsonl, .csv, .ipynb, .epub, .zip, .jpg, .jpeg, .png, .msg, .rss, .atom
+    """
+
+    static func isUnsupportedFormatOutput(_ output: String) -> Bool {
+        output.contains("UnsupportedFormatException")
+            || output.localizedCaseInsensitiveContains("No converter attempted a conversion")
+            || output.localizedCaseInsensitiveContains("filetype is simply not supported")
+    }
+
+    private static func shortMessage(from output: String) -> String {
+        if isUnsupportedFormatOutput(output) {
+            return "当前不支持该文件格式。\n\nMarkItDown 当前支持：\n\(supportedFormats)"
+        }
+
+        let lines = output
+            .split(whereSeparator: \.isNewline)
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        if let lastLine = lines.last {
+            return lastLine
+        }
+
+        return "markitdown 转换失败。"
     }
 }
 
@@ -43,14 +85,33 @@ struct MarkitdownRunner: Sendable {
             let standardError = String(data: stderrData, encoding: .utf8) ?? ""
 
             guard process.terminationStatus == 0 else {
+                let combinedOutput = standardError + standardOutput
+                if MarkitdownRunnerError.isUnsupportedFormatOutput(combinedOutput) {
+                    throw MarkitdownRunnerError.unsupportedFormat(sourceURL.pathExtension.lowercased())
+                }
                 throw MarkitdownRunnerError.commandFailed(process.terminationStatus, standardError + standardOutput)
+            }
+
+            let byteCount = outputURL.fileSize ?? 0
+            guard byteCount <= ConversionResult.inlinePreviewByteLimit else {
+                return ConversionResult(
+                    markdown: "",
+                    markdownByteCount: byteCount,
+                    previewWasSkipped: true,
+                    standardError: standardError
+                )
             }
 
             guard let markdown = try? String(contentsOf: outputURL, encoding: .utf8) else {
                 throw MarkitdownRunnerError.unreadableOutput
             }
 
-            return ConversionResult(markdown: markdown, standardError: standardError)
+            return ConversionResult(
+                markdown: markdown,
+                markdownByteCount: max(byteCount, Int64(markdown.utf8.count)),
+                previewWasSkipped: false,
+                standardError: standardError
+            )
         }.value
     }
 
@@ -159,6 +220,16 @@ struct MarkitdownRunner: Sendable {
 private extension String {
     var shellEscaped: String {
         "'" + replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+}
+
+private extension URL {
+    var fileSize: Int64? {
+        guard let size = try? resourceValues(forKeys: [.fileSizeKey]).fileSize else {
+            return nil
+        }
+
+        return Int64(size)
     }
 }
 

@@ -4,46 +4,50 @@ struct ConversionFooterView: View {
     @Environment(ConversionStore.self) private var converter
 
     var body: some View {
-        HStack(spacing: 12) {
+        VStack(spacing: 10) {
             Picker("保存位置", selection: Bindable(converter).outputMode) {
                 ForEach(OutputLocationMode.allCases) { mode in
                     Text(mode.title).tag(mode)
                 }
             }
             .pickerStyle(.menu)
-            .frame(width: 190)
+            .frame(maxWidth: .infinity)
 
             if converter.outputMode == .selectedFolder {
-                Text(converter.selectedOutputFolder?.path(percentEncoded: false) ?? "尚未选择文件夹")
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                HStack(spacing: 8) {
+                    Text(converter.selectedOutputFolder?.path(percentEncoded: false) ?? "尚未选择文件夹")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
 
-                Button("选择") {
-                    converter.chooseOutputFolder()
+                    Button("选择") {
+                        converter.chooseOutputFolder()
+                    }
                 }
             }
-
-            Spacer()
 
             if !converter.items.isEmpty {
-                Button("清空列表") {
-                    converter.clearQueue()
-                }
-                .disabled(converter.isConverting)
-
-                Button {
-                    Task {
-                        await converter.convertAll()
+                HStack {
+                    Button {
+                        converter.clearQueue()
+                    } label: {
+                        Label("清空", systemImage: "trash")
                     }
-                } label: {
-                    Text(converter.items.count == 1 ? "转换" : "转换 \(converter.items.count) 个文件")
+                    .disabled(converter.isConverting)
+
+                    Spacer()
+
+                    Button {
+                        Task {
+                            await converter.convertAll()
+                        }
+                    } label: {
+                        Label(converter.items.count == 1 ? "转换" : "转换 \(converter.items.count) 个", systemImage: "arrow.triangle.2.circlepath")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(!converter.canConvert)
                 }
-                .buttonStyle(.borderedProminent)
-                .disabled(!converter.canConvert)
             }
         }
-        .padding(.horizontal)
-        .padding(.vertical, 10)
-        .background(.bar)
     }
 }

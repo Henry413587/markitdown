@@ -2,6 +2,8 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct ConversionView: View {
+    var searchText: String = ""
+
     @Environment(ConversionStore.self) private var converter
     @Environment(HistoryStore.self) private var history
     @AppStorage("keepHistory") private var keepHistory = true
@@ -10,20 +12,12 @@ struct ConversionView: View {
     @State private var previewMode: PreviewMode = .rendered
 
     var body: some View {
-        VStack(spacing: 0) {
-            if converter.items.isEmpty {
-                EmptyDropView()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .onTapGesture {
-                        isImporterPresented = true
-                    }
-            } else {
-                ConversionWorkspaceView(previewMode: $previewMode)
-            }
-        }
-        .navigationTitle("转换至 Markdown")
-        .safeAreaInset(edge: .bottom) {
-            ConversionFooterView()
+        HSplitView {
+            ConversionQueueView(searchText: searchText)
+                .frame(minWidth: 360, idealWidth: 430, maxWidth: 520)
+
+            MarkdownPreviewView(previewMode: $previewMode)
+                .frame(minWidth: 520)
         }
         .fileImporter(
             isPresented: $isImporterPresented,

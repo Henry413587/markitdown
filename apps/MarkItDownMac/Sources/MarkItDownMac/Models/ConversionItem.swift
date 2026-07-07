@@ -41,6 +41,8 @@ struct ConversionItem: Identifiable, Codable, Hashable {
     var progress: Double
     var errorMessage: String?
     var markdownPreview: String
+    var markdownByteCount: Int64?
+    var isInlinePreviewSkipped: Bool
 
     init(sourceURL: URL) {
         self.id = UUID()
@@ -50,6 +52,8 @@ struct ConversionItem: Identifiable, Codable, Hashable {
         self.progress = 0
         self.errorMessage = nil
         self.markdownPreview = ""
+        self.markdownByteCount = nil
+        self.isInlinePreviewSkipped = false
     }
 
     var fileName: String {

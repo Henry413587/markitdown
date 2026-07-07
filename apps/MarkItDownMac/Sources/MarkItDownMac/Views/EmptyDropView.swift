@@ -8,12 +8,13 @@ struct EmptyDropView: View {
                 .foregroundStyle(.secondary)
 
             Text("将需要转换的文件拖入 App 页面或点击上方加号")
-                .font(.title3)
+                .font(.title3.weight(.semibold))
                 .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
         }
         .padding(48)
         .frame(maxWidth: 560)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+        .background(.quaternary.opacity(0.55), in: RoundedRectangle(cornerRadius: 8))
         .overlay {
             RoundedRectangle(cornerRadius: 8)
                 .strokeBorder(.separator, style: StrokeStyle(lineWidth: 1, dash: [7, 7]))

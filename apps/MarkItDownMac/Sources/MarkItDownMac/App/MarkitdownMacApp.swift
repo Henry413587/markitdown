@@ -12,7 +12,8 @@ struct MarkitdownMacApp: App {
             ContentView()
                 .environment(converter)
                 .environment(history)
-                .frame(minWidth: 980, minHeight: 680)
+                .frame(minWidth: 1240, minHeight: 720)
+                .background(WindowSizeConfigurator(minSize: CGSize(width: 1240, height: 720)))
                 .task {
                     await history.load()
                     await NotificationService.shared.requestAuthorization()
